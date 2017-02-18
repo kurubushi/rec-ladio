@@ -1,0 +1,105 @@
+#!/usr/bin/env ruby
+
+# directory path to save
+LADIO_PATH = Dir.home + "/Music/ladio/"
+# sleep time (seconds)
+SLEEP_TIME = 60
+# dat path
+DAT_PATH = "http://yp.ladio.net/stats/list.v2.dat"
+# ladio path
+LADIO_TOPPATH = "http://std1.ladio.net"
+# wget options
+WGET_OPTS = "-q"
+
+
+if ARGV[0] == nil
+  puts "usage: ladioRec mountpoint_list_file"
+  exit
+end
+
+def mount_path(mount)
+  LADIO_PATH + mount
+end
+
+
+def read_mount_list(filepath)
+  open(filepath)
+    .map {|line| line.sub(/#.*$/,"").strip}
+    .select {|line| not line.empty?}
+end
+
+
+def mkdir(path)
+  return if FileTest.exist?(path)
+  mkdir(File::dirname(path))
+  Dir::mkdir(path)
+end
+
+
+def lock_check(mount)
+  File.exist?(mount_path(mount) + "/.lock")
+end
+def lock_write(mount)
+  File.write(mount_path(mount) + "/.lock", "")
+end
+def lock_delete(mount)
+  File.delete(mount_path(mount) + "/.lock")
+end
+
+
+def to_json(item)
+  require 'json'
+
+  JSON.parse("{" + item.split("\n").map {|f| f.sub(/^.*$/,'"\&",').sub(/=/,'":"')}.join[0..-2] + "}")
+end
+
+
+def mk_rec_list(mount_list)
+  require 'kconv'
+  require 'open-uri'
+
+  URI(DAT_PATH).read.kconv(Kconv::UTF8)
+    .gsub(/"/,'\"').split("\n\n").map {|item| to_json(item)}
+    .select {|item| mount_list.include?(item["MNT"][1..-1])}
+end
+
+
+def rec_aux(item)
+  mount = item["MNT"][1..-1]
+  if not lock_check(mount)
+    t = Time.now
+    title = mount + "-" + format("%04d%02d%02d%02d%02d", t.year, t.month, t.day, t.hour, t.min)
+    mp = mount_path(mount)
+
+    mkdir(mp)
+    lock_write(mount)
+    File.write(mp + "/" + title + ".json", JSON.generate(item))
+    url = LADIO_TOPPATH + ":" + item["PRT"] + "/" + mount
+    `#{"wget -O " + mp + "/" + title + ".mp3 " + WGET_OPTS + " " + url}`
+    puts "recording end: " + mount
+    lock_delete(mount)
+  end
+end
+
+
+def rec(rec_list)
+  rec_list.each {|item| fork do rec_aux(item) end}
+end
+
+
+while true do
+  begin
+    rec_list = mk_rec_list(read_mount_list(ARGV[0]))
+    rec(rec_list)
+    t = Time.now
+    if rec_list.empty?
+      puts format("%02d:%02d    not recording", t.hour, t.min)
+    else
+      puts format("%02d:%02d    recording", t.hour, t.min)
+      rec_list.each {|item| puts format("  %s: %s / %s", item["MNT"],item["NAM"],item["DJ"])}
+    end
+  rescue => e
+    p e
+  end
+  `#{"sleep " + SLEEP_TIME.to_s}`
+end

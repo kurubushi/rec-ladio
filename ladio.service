@@ -1,0 +1,12 @@
+[Unit]
+Description = record radio in ladio
+
+[Service]
+ExecStart = /home/user/.local/bin/rec-ladio /home/user/Music/ladio/mount_list
+Restart = always
+StartLimitInterval = 60
+StartLimitBurst = 1
+Type = simple
+
+[Install]
+WantedBy = default.target

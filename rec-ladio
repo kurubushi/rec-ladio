@@ -92,9 +92,7 @@ while true do
     rec_list = mk_rec_list(read_mount_list(ARGV[0]))
     rec(rec_list)
     t = Time.now
-    if rec_list.empty?
-      puts format("%02d:%02d    not recording", t.hour, t.min)
-    else
+    if !(rec_list.empty?)
       puts format("%02d:%02d    recording", t.hour, t.min)
       rec_list.each {|item| puts format("  %s: %s / %s", item["MNT"],item["NAM"],item["DJ"])}
     end
